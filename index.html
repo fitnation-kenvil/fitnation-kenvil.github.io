@@ -149,6 +149,27 @@ button:disabled, input:disabled { opacity: .5; cursor: not-allowed; }
 .cancel-other input { flex: 1 1 200px; }
 @media (max-width: 420px) { .wrap { padding: 0 16px 48px; } .card { padding: 16px; } .brand .wm { height: 32px; } .brand .f { height: 26px; } .top .addr { font-size: 12px; } .big { font-size: 56px; } .spots { gap: 6px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Staff page */
+.staff-gate { max-width: 440px; margin: 40px auto; }
+.staff-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 24px 0 6px; }
+.staff-head h1 { font-size: clamp(36px, 7vw, 64px); }
+.staff-actions { display: flex; gap: 8px; }
+.sday { margin-top: 26px; display: grid; gap: 12px; }
+.sday > h2 { font-size: 26px; }
+.sclass { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: grid; gap: 10px; }
+.sclass-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+.sclass-top b { font-family: var(--display); font-weight: 400; font-size: 22px; text-transform: uppercase; }
+.sclass-top b.t { color: var(--green); }
+.tablewrap { overflow-x: auto; }
+.rtable { width: 100%; border-collapse: collapse; font-size: 15px; }
+.rtable th { text-align: left; font-family: var(--label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-size: 13px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.rtable td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rtable a { color: var(--ink); }
+.tag { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.tag.in { color: var(--green); } .tag.wait { color: var(--warn); } .tag.out { color: var(--muted); }
+.staff-link { color: var(--muted); }
+input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
 </style>
 </head>
 <body>
@@ -163,7 +184,7 @@ button:disabled, input:disabled { opacity: .5; cursor: not-allowed; }
   <main id="app"></main>
   <footer class="site-foot">
     <span><b>Fitnation Athletics</b> · Kenvil</span>
-    <span>659 US-46, Kenvil, NJ 07847 · 14 spots per class</span>
+    <span>659 US-46, Kenvil, NJ 07847 · 14 spots per class · <a class="staff-link" href="#staff">Staff</a></span>
   </footer>
 </div>
 
@@ -394,11 +415,74 @@ button:disabled, input:disabled { opacity: .5; cursor: not-allowed; }
     });
   }
 
+  var ST = { code: null, rows: null, err: "", busy: false };
+  try { ST.code = sessionStorage.getItem("fn_staff") || null; } catch (e) {}
+  function fmtPhone(p) { p = String(p || ""); return p.length === 10 ? "(" + p.slice(0, 3) + ") " + p.slice(3, 6) + "-" + p.slice(6) : p; }
+  async function loadStaff() {
+    if (!ST.code || !db) return;
+    ST.busy = true;
+    if (location.hash === "#staff" && !ST.rows) render();
+    var now = new Date(), to = new Date(now); to.setDate(to.getDate() + 8);
+    var res = await db.rpc("staff_roster", { p_code: ST.code, p_from: ymd(now), p_to: ymd(to) });
+    ST.busy = false;
+    if (res.error) {
+      var bad = /passcode/i.test(res.error.message || "");
+      ST.err = bad ? "That passcode didn't work." : "Couldn't load the list. Check your connection.";
+      ST.rows = null;
+      if (bad) { ST.code = null; try { sessionStorage.removeItem("fn_staff"); } catch (e) {} }
+    } else { ST.err = ""; ST.rows = res.data || []; }
+    if (location.hash === "#staff") render();
+  }
+  function renderStaff() {
+    if (!ST.rows) {
+      var d = ST.busy ? " disabled" : "";
+      app.innerHTML = '<section class="card staff-gate"><p class="eyebrow">Staff only</p><h2>Class sign-ups</h2>' +
+        '<form id="sform"><div class="field"><label for="scode">Staff passcode</label><input type="password" id="scode" autocomplete="current-password"' + d + '></div>' +
+        '<button type="submit" class="primary"' + d + ">" + (ST.busy ? "Checking…" : "View sign-ups") + "</button>" +
+        '<p class="msg err" role="status">' + esc(ST.err) + '</p></form><a class="back" href="#">&larr; Back to classes</a></section>';
+      document.getElementById("sform").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var v = document.getElementById("scode").value.trim();
+        if (!v) return;
+        ST.code = v; ST.err = "";
+        try { sessionStorage.setItem("fn_staff", v); } catch (x) {}
+        loadStaff();
+      });
+      return;
+    }
+    var now = new Date(), w = week(now), byKey = {}, order = { "in": 0, wait: 1, out: 2 };
+    ST.rows.forEach(function (r) { var k = r.class_id + "|" + r.session_date; (byKey[k] = byKey[k] || []).push(r); });
+    var total = ST.rows.filter(function (r) { return r.status === "in"; }).length;
+    var html = '<div class="staff-head"><div><p class="eyebrow">Staff only</p><h1>Sign-ups</h1><p class="sub">Next 7 days · ' + total + ' booked</p></div>' +
+      '<div class="staff-actions"><button type="button" class="secondary" id="srefresh">Refresh</button><button type="button" class="secondary" id="sout">Lock</button></div></div>';
+    w.forEach(function (d) {
+      if (!d.list.length) return;
+      html += '<section class="sday"><h2>' + esc(d.date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })) + "</h2>";
+      d.list.forEach(function (o) {
+        var rows = (byKey[o.s.id + "|" + o.date] || []).slice().sort(function (a, b) { return order[a.status] - order[b.status] || new Date(a.booked_at) - new Date(b.booked_at); });
+        var nIn = rows.filter(function (r) { return r.status === "in"; }).length, nW = rows.filter(function (r) { return r.status === "wait"; }).length;
+        html += '<div class="sclass"><div class="sclass-top"><span><b class="t">' + esc(timeLabel(o.s)) + "</b> <b>" + esc(TYPES[o.s.type].short) + "</b> · Coach " + esc(o.s.coach) + "</span>" +
+          '<span class="pill ' + (nIn >= CAP ? "full" : "ok") + '">' + nIn + "/" + CAP + (nW ? " · " + nW + " waitlist" : "") + "</span></div>";
+        if (!rows.length) html += '<p class="sub">No sign-ups yet.</p>';
+        else html += '<div class="tablewrap"><table class="rtable"><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Status</th></tr></thead><tbody>' +
+          rows.map(function (r) {
+            var lab = r.status === "in" ? "Booked" : r.status === "wait" ? "Waitlist" : "Cancelled";
+            return "<tr><td>" + esc(r.name) + '</td><td><a href="tel:' + esc(r.phone) + '">' + esc(fmtPhone(r.phone)) + '</a></td><td><a href="mailto:' + esc(r.email) + '">' + esc(r.email) + '</a></td><td><span class="tag ' + esc(r.status) + '">' + lab + "</span></td></tr>";
+          }).join("") + "</tbody></table></div>";
+        html += "</div>";
+      });
+      html += "</section>";
+    });
+    app.innerHTML = html;
+    document.getElementById("srefresh").addEventListener("click", loadStaff);
+    document.getElementById("sout").addEventListener("click", function () { ST.code = null; ST.rows = null; try { sessionStorage.removeItem("fn_staff"); } catch (e) {} render(); });
+  }
+
   function render() {
-    var ids = ["name", "phone", "email", "contact"], keep = {}, focused = document.activeElement && document.activeElement.id;
+    var ids = ["name", "phone", "email", "contact", "scode"], keep = {}, focused = document.activeElement && document.activeElement.id;
     ids.forEach(function (id) { var el = document.getElementById(id); if (el) keep[id] = el.value; });
-    var s = route();
-    if (s) renderClass(s); else renderHome();
+    if (location.hash === "#staff") renderStaff();
+    else { var s = route(); if (s) renderClass(s); else renderHome(); }
     ids.forEach(function (id) { var el = document.getElementById(id); if (el && keep[id]) el.value = keep[id]; });
     if (focused && ids.indexOf(focused) !== -1) { var f = document.getElementById(focused); if (f) f.focus(); }
   }
@@ -450,7 +534,8 @@ button:disabled, input:disabled { opacity: .5; cursor: not-allowed; }
     await load();
   }
 
-  window.addEventListener("hashchange", function () { S.msg = ""; S.showCancelOther = false; render(); window.scrollTo(0, 0); });
+  window.addEventListener("hashchange", function () { S.msg = ""; S.showCancelOther = false; if (location.hash === "#staff" && ST.code && !ST.rows) loadStaff(); render(); window.scrollTo(0, 0); });
+  if (location.hash === "#staff" && ST.code) loadStaff();
   render();
   load();
   setInterval(load, 20000);
