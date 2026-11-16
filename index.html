@@ -278,7 +278,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     if (left === 0) return { label: "Full · waitlist open", kind: "full" };
     if (left === 1) return { label: "Last spot!", kind: "last" };
     if (left <= 4) return { label: "Only " + left + " spots left", kind: "warn" };
-    return { label: left + " spots open", kind: "ok" };
+    return { label: "Spots available", kind: "ok" };
   }
 
   // Cancel codes saved on this device only.
@@ -316,8 +316,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
       '<div class="row1"><div><p class="time">' + esc(timeLabel(o.s)) + '</p><p class="when">' + esc(dayWord(o.start, now)) + " · " + esc(o.start.toLocaleDateString(undefined, { month: "short", day: "numeric" })) + "</p></div>" + pill + "</div>" +
       '<p class="cname">' + esc(o.s.cls) + "</p>" +
       '<p class="coach">Coach <b class="silver">' + esc(o.s.coach) + "</b></p>" +
-      '<div class="meter" aria-hidden="true"><i style="width:' + (live ? Math.round(n / CAP * 100) : 0) + '%"></i></div>' +
-      '<div class="foot"><span>' + (live ? n + " of " + CAP + " spots taken" : "&nbsp;") + '</span><span class="cta">' + (o.past ? "" : "Book &rarr;") + "</span></div>";
+      '<div class="foot"><span>' + "Up to " + CAP + " people" + '</span><span class="cta">' + (o.past ? "" : "Book &rarr;") + "</span></div>";
     return o.past ? '<div class="ccard past">' + inner + "</div>" : '<a class="ccard" href="#' + o.s.id + '">' + inner + "</a>";
   }
 
@@ -369,7 +368,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     var parts = [n + " of " + CAP + " spots taken"]; if (c.waiting) parts.push(c.waiting + " on the waitlist");
     var link = location.href.split("#")[0] + "#" + s.id;
     var invite = s.cls + " with Coach " + s.coach + ", " + (/^(Tonight|Today|Tomorrow)$/.test(word) ? word.toLowerCase() : word) + " at " + timeLabel(s) + ". " +
-      (live ? (left === 0 ? "Full, but the waitlist is open." : left <= 4 ? "Only " + left + " spots left." : n + "/14 spots taken.") : "") + "\nSave your spot: " + link;
+      (live ? (left === 0 ? "Full, but the waitlist is open." : left <= 4 ? "Only " + left + " spots left." : "Spots available.") : "") + "\nSave your spot: " + link;
 
     var bookBlock = mine
       ? '<div class="booked"><strong>You\'re booked</strong><p>' + esc(mine.n ? mine.n + ", y" : "Y") + 'our spot is saved for ' + esc(word.toLowerCase() === "tonight" || word.toLowerCase() === "today" || word.toLowerCase() === "tomorrow" ? word.toLowerCase() : word) + " at " + esc(timeLabel(s)) + '. Can\'t make it? Cancel so someone else gets it.</p><button type="button" class="secondary" id="cancel-mine"' + dis + '>Cancel my spot</button></div>'
@@ -388,10 +387,9 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
       '<p class="cmeta">' + esc(t.name) + " · 659 US-46, Kenvil</p>" +
       '<p class="countdown">' + countdown(o.start, now) + "</p></section>" +
       '<div class="grid"><div class="col">' +
-        '<section class="card capacity" aria-label="Spots taken"><div class="cap-top"><div class="big"><span>' + (live ? n : "–") + '</span><span class="of">/14</span><span class="big-label">Spots taken</span></div>' +
+        '<section class="card capacity" aria-label="Availability"><div class="cap-top"><h2>Availability</h2>' +
           '<span class="pill ' + (live ? sc.kind : "idle") + '">' + esc(live ? sc.label : (S.loaded ? "Not open yet" : "Loading")) + "</span></div>" +
-          '<p class="sub">' + (live ? parts.join(" · ") : "&nbsp;") + "</p>" +
-          '<ul class="spots">' + spots + '</ul><p class="legend">Green spots are taken. Names stay private.</p></section>' +
+          '<p class="sub">Small-group class with up to ' + CAP + ' people. Book ahead to hold your spot.</p></section>' +
         '<section class="card about"><h2>About this class</h2><p class="sub">' + esc(t.about) + "</p></section>" +
       '</div><div class="col">' +
         '<section class="card book"><h2>' + (mine ? "Your spot" : "Save your spot") + "</h2>" + noticeHtml() + bookBlock +
