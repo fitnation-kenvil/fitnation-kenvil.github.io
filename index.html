@@ -57,6 +57,9 @@ h3 { margin: 0; font-family: var(--label); font-size: 15px; font-weight: 700; le
 .day[aria-pressed="true"] .wd, .day[aria-pressed="true"] .ct { color: var(--green-ink); }
 .day[aria-pressed="true"] .dots i { background: var(--green-ink); }
 .day.all .dn { font-size: 22px; padding: 4px 0 2px; }
+.wk { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); }
+.wkb { border: 0; background: transparent; color: var(--muted); padding: 8px 16px; border-radius: 999px; font-family: var(--label); font-weight: 700; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; }
+.wkb[aria-pressed="true"] { background: var(--green); color: var(--green-ink); }
 .day:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 @media (max-width: 640px) {
   .days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -221,13 +224,15 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     { id: "val-fri-1000",       cls: "Yoga",                coach: "Valentina", type: "yoga",    day: 5, h: 10, m: 0 },
     { id: "emily-sat-0900",     cls: "Hybrid Conditioning", coach: "Emily",     type: "sc",      day: 6, h: 9,  m: 0 },
     { id: "bridget-sat-1000",   cls: "Pilates Sculpt",      coach: "Bridget",   type: "pilates", day: 6, h: 10, m: 0 },
-    { id: "martha-sun-1000",    cls: "Hybrid Conditioning", coach: "Martha",    type: "sc",      day: 0, h: 10, m: 0 }
+    { id: "martha-sun-1000",    cls: "Hybrid Conditioning", coach: "Martha",    type: "sc",      day: 0, h: 10, m: 0 },
+    // One-time classes: "only" = the single date it runs.
+    { id: "avery-fri-0900",     cls: "Hybrid Conditioning", coach: "Avery",     type: "sc",      day: 5, h: 9,  m: 0, only: "2026-11-27" }
   ];
 
   var db = null;
   try { db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch (e) { db = null; }
   var app = document.getElementById("app");
-  var S = { counts: {}, loaded: false, error: "", busy: false, msg: "", msgKind: "", day: null, showCancelOther: false };
+  var S = { counts: {}, loaded: false, error: "", busy: false, msg: "", msgKind: "", day: null, wk: 0, showCancelOther: false };
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]; }); }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
@@ -236,31 +241,32 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
   function timeLabel(s) { var h = s.h % 12 || 12; return h + ":" + pad(s.m) + " " + (s.h < 12 ? "AM" : "PM"); }
   function firstName(n) { return String(n).trim().split(/\s+/)[0]; }
 
-  // The 7 days starting today, each with its sessions and real start times.
-  function week(now) {
-    var days = [];
-    for (var i = 0; i < 7; i++) {
+  // One-off changes for a single date: "sessionId|YYYY-MM-DD".
+  var SKIP = { "christine-wed-0530|2026-11-25": true };
+
+  // The days starting today (14 = this week + next), each with its sessions and real start times.
+  function days(now, count) {
+    var out = [];
+    for (var i = 0; i < count; i++) {
       var d = startOfDay(now); d.setDate(d.getDate() + i);
-      var list = SESSIONS.filter(function (s) { return s.day === d.getDay(); }).map(function (s) {
+      var key = ymd(d);
+      var list = SESSIONS.filter(function (s) {
+        return (s.only ? s.only === key : s.day === d.getDay()) && !SKIP[s.id + "|" + key];
+      }).map(function (s) {
         var start = new Date(d); start.setHours(s.h, s.m, 0, 0);
-        return { s: s, start: start, date: ymd(d), past: now.getTime() >= start.getTime() + LEN * 60000 };
+        return { s: s, start: start, date: key, past: now.getTime() >= start.getTime() + LEN * 60000 };
       }).sort(function (a, b) { return a.start - b.start; });
-      days.push({ date: d, key: ymd(d), list: list });
+      out.push({ date: d, key: key, list: list });
     }
-    return days;
+    return out;
   }
-  function occurrence(id, now) {
-    var w = week(now);
-    for (var i = 0; i < w.length; i++) for (var j = 0; j < w[i].list.length; j++) {
-      var o = w[i].list[j];
-      if (o.s.id === id && !o.past) return o;
+  function occurrence(id, date, now) {
+    var all = days(now, 14);
+    for (var i = 0; i < all.length; i++) for (var j = 0; j < all[i].list.length; j++) {
+      var o = all[i].list[j];
+      if (o.s.id === id && (date ? o.date === date : !o.past)) return o;
     }
-    // Already happened today: show next week's.
-    var s = SESSIONS.find(function (x) { return x.id === id; });
-    if (!s) return null;
-    var d = startOfDay(now); d.setDate(d.getDate() + 7);
-    var start = new Date(d); start.setHours(s.h, s.m, 0, 0);
-    return { s: s, start: start, date: ymd(d), past: false };
+    return null;
   }
   function dayWord(start, now) {
     var diff = Math.round((startOfDay(start) - startOfDay(now)) / 86400000);
@@ -293,7 +299,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
 
   async function load() {
     if (!db) { S.error = "offline"; S.loaded = true; render(); return; }
-    var now = new Date(), from = ymd(now), to = new Date(now); to.setDate(to.getDate() + 8);
+    var now = new Date(), from = ymd(now), to = new Date(now); to.setDate(to.getDate() + 15);
     var res = await db.rpc("spot_counts", { p_from: from, p_to: ymd(to) });
     if (res.error) {
       S.error = /function|schema cache|does not exist/i.test(res.error.message || "") ? "setup" : "offline";
@@ -307,7 +313,11 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     render();
   }
 
-  function route() { var h = location.hash.replace(/^#\/?/, ""); return SESSIONS.find(function (s) { return s.id === h; }) || null; }
+  function route() {
+    var h = location.hash.replace(/^#\/?/, "").split("/");
+    var s = SESSIONS.find(function (x) { return x.id === h[0]; });
+    return s ? { s: s, date: /^\d{4}-\d{2}-\d{2}$/.test(h[1] || "") ? h[1] : null } : null;
+  }
   function noticeHtml() {
     if (S.error === "setup") return '<p class="notice">Booking opens soon. The front desk is still setting up the class lists.</p>';
     if (S.error === "offline") return '<p class="notice">Can\'t reach the class lists right now. Check your connection and refresh.</p>';
@@ -322,25 +332,29 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
       '<p class="cname">' + esc(o.s.cls) + "</p>" +
       '<p class="coach">Coach <b class="silver">' + esc(o.s.coach) + "</b></p>" +
       '<div class="foot"><span>' + "Up to " + CAP + " people" + '</span><span class="cta">' + (o.past ? "" : "Book &rarr;") + "</span></div>";
-    return o.past ? '<div class="ccard past">' + inner + "</div>" : '<a class="ccard" href="#' + o.s.id + '">' + inner + "</a>";
+    return o.past ? '<div class="ccard past">' + inner + "</div>" : '<a class="ccard" href="#' + o.s.id + "/" + o.date + '">' + inner + "</a>";
   }
 
   function renderHome() {
-    var now = new Date(), w = week(now);
-    if (S.day === null) {
+    var now = new Date(), both = days(now, 14), w = both.slice(S.wk * 7, S.wk * 7 + 7), today = ymd(now);
+    if (S.day === null || (S.day !== "all" && !w.some(function (d) { return d.key === S.day; }))) {
       var first = w.find(function (d) { return d.list.some(function (o) { return !o.past; }); });
       S.day = first ? first.key : w[0].key;
     }
-    var dayBtns = '<button type="button" class="day all" data-day="all" aria-pressed="' + (S.day === "all") + '"><span class="wd">This</span><span class="dn">WEEK</span><span class="ct">' + w.reduce(function (a, d) { return a + d.list.length; }, 0) + ' classes</span><span class="dots"></span></button>' +
+    var span = w[0].date.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " \u2013 " + w[6].date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    var wkBtns = '<div class="wk" role="group" aria-label="Choose week">' + ["This week", "Next week"].map(function (lab, i) {
+      return '<button type="button" class="wkb" data-wk="' + i + '" aria-pressed="' + (S.wk === i) + '">' + lab + "</button>";
+    }).join("") + "</div>";
+    var dayBtns = '<button type="button" class="day all" data-day="all" aria-pressed="' + (S.day === "all") + '"><span class="wd">' + (S.wk ? "Next" : "This") + '</span><span class="dn">WEEK</span><span class="ct">' + w.reduce(function (a, d) { return a + d.list.length; }, 0) + ' classes</span><span class="dots"></span></button>' +
       w.map(function (d, i) {
         var dots = d.list.map(function () { return "<i></i>"; }).join("");
-        return '<button type="button" class="day' + (i === 0 ? " today" : "") + '" data-day="' + d.key + '" aria-pressed="' + (S.day === d.key) + '" aria-label="' + esc(d.date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })) + ", " + d.list.length + ' classes">' +
-          '<span class="wd">' + (i === 0 ? "Today" : esc(d.date.toLocaleDateString(undefined, { weekday: "short" }))) + '</span><span class="dn">' + d.date.getDate() + '</span><span class="ct">' + (d.list.length ? d.list.length + (d.list.length === 1 ? " class" : " classes") : "No classes") + '</span><span class="dots">' + dots + "</span></button>";
+        return '<button type="button" class="day' + (d.key === today ? " today" : "") + '" data-day="' + d.key + '" aria-pressed="' + (S.day === d.key) + '" aria-label="' + esc(d.date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })) + ", " + d.list.length + ' classes">' +
+          '<span class="wd">' + (d.key === today ? "Today" : esc(d.date.toLocaleDateString(undefined, { weekday: "short" }))) + '</span><span class="dn">' + d.date.getDate() + '</span><span class="ct">' + (d.list.length ? d.list.length + (d.list.length === 1 ? " class" : " classes") : "No classes") + '</span><span class="dots">' + dots + "</span></button>";
       }).join("");
 
     var listTitle, items;
     if (S.day === "all") {
-      listTitle = "This week";
+      listTitle = (S.wk ? "Next week" : "This week") + " \u00b7 " + span;
       items = [];
       w.forEach(function (d) { d.list.forEach(function (o) { if (!o.past) items.push(o); }); });
     } else {
@@ -354,24 +368,29 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     app.innerHTML =
       '<section class="hero"><p class="eyebrow">Fitnation Athletics · Kenvil, NJ</p><h1>Book your<span>class</span></h1>' +
       '<p class="lede">Pick a day, tap a class and save your spot. Every class caps at 14, so book early.</p></section>' +
-      '<section class="cal" aria-label="This week\'s calendar"><div class="cal-head"><h3>Class calendar</h3></div><div class="days">' + dayBtns + "</div></section>" +
+      '<section class="cal" aria-label="This week\'s calendar"><div class="cal-head"><h3>Class calendar \u00b7 ' + esc(span) + '</h3>' + wkBtns + '</div><div class="days">' + dayBtns + "</div></section>" +
       '<section aria-live="polite"><div class="list-head"><h2>' + esc(listTitle) + "</h2></div>" + cards + "</section>" + noticeHtml() +
       '<section class="types" aria-label="Our classes">' + ["pilates", "yoga", "sc"].map(function (k) { return '<div class="type"><h2>' + esc(TYPES[k].name) + "</h2><p>" + esc(TYPES[k].about) + "</p></div>"; }).join("") + "</section>";
 
     app.querySelectorAll(".day").forEach(function (b) {
       b.addEventListener("click", function () { S.day = b.getAttribute("data-day"); render(); });
     });
+    app.querySelectorAll(".wkb").forEach(function (b) {
+      b.addEventListener("click", function () { var k = +b.getAttribute("data-wk"); if (k !== S.wk) { S.wk = k; S.day = null; render(); } });
+    });
   }
 
-  function renderClass(s) {
-    var now = new Date(), o = occurrence(s.id, now), t = TYPES[s.type], word = dayWord(o.start, now);
+  function renderClass(r) {
+    var s = r.s, now = new Date(), o = occurrence(s.id, r.date, now) || occurrence(s.id, null, now);
+    if (!o) { renderHome(); return; }
+    var t = TYPES[s.type], word = dayWord(o.start, now);
     var c = countFor(o), n = c.booked, left = Math.max(0, CAP - n), sc = scarcity(n), live = S.loaded && !S.error;
     var key = s.id + "|" + o.date, mine = saved()[key];
     var spots = "";
     for (var i = 1; i <= CAP; i++) spots += '<li class="spot' + (live && i <= n ? " taken" : "") + '" aria-hidden="true">' + (live && i <= n ? "" : i) + "</li>";
     var dis = S.busy || !live ? " disabled" : "";
     var parts = [n + " of " + CAP + " spots taken"]; if (c.waiting) parts.push(c.waiting + " on the waitlist");
-    var link = location.href.split("#")[0] + "#" + s.id;
+    var link = location.href.split("#")[0] + "#" + s.id + "/" + o.date;
     var invite = s.cls + " with Coach " + s.coach + ", " + (/^(Tonight|Today|Tomorrow)$/.test(word) ? word.toLowerCase() : word) + " at " + timeLabel(s) + ". " +
       (live ? (left === 0 ? "Full, but the waitlist is open." : left <= 4 ? "Only " + left + " spots left." : n >= 8 ? "Almost full, book now!" : n >= 4 ? "Few spots left, book now!" : "Spots available.") : "") + "\nSave your spot: " + link;
 
@@ -386,7 +405,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
 
     app.innerHTML =
       '<a class="back" href="#">&larr; All classes</a>' +
-      '<section class="chero"><p class="eyebrow">' + esc(word) + " · " + esc(o.start.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })) + "</p>" +
+      '<section class="chero"><p class="eyebrow">' + (/^(Tonight|Today|Tomorrow)$/.test(word) ? esc(word) + " · " : "") + esc(o.start.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })) + "</p>" +
       '<h1><span>' + esc(s.cls) + '</span><span class="t">' + esc(timeLabel(s)) + "</span></h1>" +
       '<p class="coachline">Coach <span class="silver">' + esc(s.coach) + "</span></p>" +
       '<p class="cmeta">' + esc(t.name) + " · 659 US-46, Kenvil</p>" +
@@ -427,7 +446,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     if (!ST.code || !db) return;
     ST.busy = true;
     if (location.hash === "#staff" && !ST.rows) render();
-    var now = new Date(), to = new Date(now); to.setDate(to.getDate() + 8);
+    var now = new Date(), to = new Date(now); to.setDate(to.getDate() + 15);
     var res = await db.rpc("staff_roster", { p_code: ST.code, p_from: ymd(now), p_to: ymd(to) });
     ST.busy = false;
     if (res.error) {
@@ -455,10 +474,10 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
       });
       return;
     }
-    var now = new Date(), w = week(now), byKey = {}, order = { "in": 0, wait: 1, out: 2 };
+    var now = new Date(), w = days(now, 14), byKey = {}, order = { "in": 0, wait: 1, out: 2 };
     ST.rows.forEach(function (r) { var k = r.class_id + "|" + r.session_date; (byKey[k] = byKey[k] || []).push(r); });
     var total = ST.rows.filter(function (r) { return r.status === "in"; }).length;
-    var html = '<div class="staff-head"><div><p class="eyebrow">Staff only</p><h1>Sign-ups</h1><p class="sub">Next 7 days · ' + total + ' booked</p></div>' +
+    var html = '<div class="staff-head"><div><p class="eyebrow">Staff only</p><h1>Sign-ups</h1><p class="sub">Next 2 weeks · ' + total + ' booked</p></div>' +
       '<div class="staff-actions"><button type="button" class="secondary" id="srefresh">Refresh</button><button type="button" class="secondary" id="sout">Lock</button></div></div>';
     w.forEach(function (d) {
       if (!d.list.length) return;
