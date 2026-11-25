@@ -207,6 +207,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
   var TYPES = {
     pilates: { name: "Pilates Sculpt", about: "A low-impact, full-body workout focused on core strength, controlled movements and stability. Improves flexibility, posture, balance and overall muscle tone. Suitable for all fitness levels." },
     yoga: { name: "Yoga", about: "A mindful, full-body practice combining movement, stretching, balance and breathwork to improve flexibility, strength, mobility and relaxation. Suitable for all fitness levels." },
+    special: { name: "Special Event", about: "A one-time master class taught by the whole Fitnation coaching team. All fitness levels welcome." },
     sc: { name: "Hybrid Strength & Conditioning", about: "A high-energy, full-body workout combining strength training, cardio and functional movements. Build muscle, improve endurance, burn calories and push your limits. Designed for all fitness levels." }
   };
 
@@ -226,7 +227,8 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     { id: "bridget-sat-1000",   cls: "Pilates Sculpt",      coach: "Bridget",   type: "pilates", day: 6, h: 10, m: 0 },
     { id: "martha-sun-1000",    cls: "Hybrid Conditioning", coach: "Martha",    type: "sc",      day: 0, h: 10, m: 0 },
     // One-time classes: "only" = the single date it runs.
-    { id: "avery-fri-0900",     cls: "Hybrid Conditioning", coach: "Avery",     type: "sc",      day: 5, h: 9,  m: 0, only: "2026-11-27" }
+    { id: "avery-fri-0900",     cls: "Hybrid Conditioning", coach: "Avery",     type: "sc",      day: 5, h: 9,  m: 0, only: "2026-11-27" },
+    { id: "feast-thu-1100",     cls: "Feast Mode Master Class", coach: "All coaches", team: true, type: "special", day: 4, h: 11, m: 0, only: "2026-11-26" }
   ];
 
   var db = null;
@@ -330,7 +332,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     var inner =
       '<div class="row1"><div><p class="time">' + esc(timeLabel(o.s)) + '</p><p class="when">' + esc(dayWord(o.start, now)) + " · " + esc(o.start.toLocaleDateString(undefined, { month: "short", day: "numeric" })) + "</p></div>" + pill + "</div>" +
       '<p class="cname">' + esc(o.s.cls) + "</p>" +
-      '<p class="coach">Coach <b class="silver">' + esc(o.s.coach) + "</b></p>" +
+      '<p class="coach">' + (o.s.team ? "With " : "Coach ") + '<b class="silver">' + esc(o.s.coach) + "</b></p>" +
       '<div class="foot"><span>' + "Up to " + CAP + " people" + '</span><span class="cta">' + (o.past ? "" : "Book &rarr;") + "</span></div>";
     return o.past ? '<div class="ccard past">' + inner + "</div>" : '<a class="ccard" href="#' + o.s.id + "/" + o.date + '">' + inner + "</a>";
   }
@@ -391,7 +393,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
     var dis = S.busy || !live ? " disabled" : "";
     var parts = [n + " of " + CAP + " spots taken"]; if (c.waiting) parts.push(c.waiting + " on the waitlist");
     var link = location.href.split("#")[0] + "#" + s.id + "/" + o.date;
-    var invite = s.cls + " with Coach " + s.coach + ", " + (/^(Tonight|Today|Tomorrow)$/.test(word) ? word.toLowerCase() : word) + " at " + timeLabel(s) + ". " +
+    var invite = s.cls + " with " + (s.team ? "" : "Coach ") + s.coach + ", " + (/^(Tonight|Today|Tomorrow)$/.test(word) ? word.toLowerCase() : word) + " at " + timeLabel(s) + ". " +
       (live ? (left === 0 ? "Full, but the waitlist is open." : left <= 4 ? "Only " + left + " spots left." : n >= 8 ? "Almost full, book now!" : n >= 4 ? "Few spots left, book now!" : "Spots available.") : "") + "\nSave your spot: " + link;
 
     var bookBlock = mine
@@ -407,7 +409,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
       '<a class="back" href="#">&larr; All classes</a>' +
       '<section class="chero"><p class="eyebrow">' + (/^(Tonight|Today|Tomorrow)$/.test(word) ? esc(word) + " · " : "") + esc(o.start.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })) + "</p>" +
       '<h1><span>' + esc(s.cls) + '</span><span class="t">' + esc(timeLabel(s)) + "</span></h1>" +
-      '<p class="coachline">Coach <span class="silver">' + esc(s.coach) + "</span></p>" +
+      '<p class="coachline">' + (s.team ? "With " : "Coach ") + '<span class="silver">' + esc(s.coach) + "</span></p>" +
       '<p class="cmeta">' + esc(t.name) + " · 659 US-46, Kenvil</p>" +
       '<p class="countdown">' + countdown(o.start, now) + "</p></section>" +
       '<div class="grid"><div class="col">' +
@@ -485,7 +487,7 @@ input[type="password"] { width: 100%; font: inherit; font-size: 17px; padding: 1
       d.list.forEach(function (o) {
         var rows = (byKey[o.s.id + "|" + o.date] || []).slice().sort(function (a, b) { return order[a.status] - order[b.status] || new Date(a.booked_at) - new Date(b.booked_at); });
         var nIn = rows.filter(function (r) { return r.status === "in"; }).length, nW = rows.filter(function (r) { return r.status === "wait"; }).length;
-        html += '<div class="sclass"><div class="sclass-top"><span><b class="t">' + esc(timeLabel(o.s)) + "</b> <b>" + esc(o.s.cls) + "</b> · Coach " + esc(o.s.coach) + "</span>" +
+        html += '<div class="sclass"><div class="sclass-top"><span><b class="t">' + esc(timeLabel(o.s)) + "</b> <b>" + esc(o.s.cls) + "</b> · " + (o.s.team ? "" : "Coach ") + esc(o.s.coach) + "</span>" +
           '<span class="pill ' + (nIn >= CAP ? "full" : "ok") + '">' + nIn + "/" + CAP + (nW ? " · " + nW + " waitlist" : "") + "</span></div>";
         if (!rows.length) html += '<p class="sub">No sign-ups yet.</p>';
         else html += '<div class="tablewrap"><table class="rtable"><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Status</th></tr></thead><tbody>' +
